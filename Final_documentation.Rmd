@@ -1,0 +1,548 @@
+---
+title: "Scripts and notes for the analyses of the Blumeria graminis f. sp. hordei DH14 genome"
+output: html_notebook
+---
+# 0. LIBRARIES USED
+```{r}
+options(scipen=999)
+library(ggplot2)
+library(reshape2) 
+library(plyr)
+library(scales)
+library(RColorBrewer)
+library(ggdendro)
+library(reshape)
+library(plotly)
+library(heatmaply)
+library(gplots)
+library(cluster)
+library(ggjoy)
+library(ape)
+library(geiger)
+
+
+
+```
+
+# 1. COPY NUMBER VARIATION - Figure 3A
+
+This script produces the copy number variation heatmap.
+
+Initially we prepare the files for importing to R
+```{bash}
+
+### First you need the per base coverage of the reference genome (DH14 in this case)
+### based on the mapping done with BWA (see 01 script)
+
+$bedtools genomecov -ibam $isolate.sorted.bam -bga > $isolate.sorted.bam.bedgraph
+
+### Then you intersect the coverage file with the positions of the SP-coding genes
+### for this you can generate a bed file based on the gff file of the annotation with
+### the ranges of the CDS annotation (not the mRNA or the gene, since the include UTRs
+### so your calculation will be off).
+
+$bedtools intersect -wb -b secreted.bed -a $isolate.sorted.bam.bedgraph > $isolate.bedgraph_overlap.all
+
+### Using this in to a for loop will generate the files for every bam file you have
+
+```
+
+Go in to the folder with the stored bedgraphs and read the files. Then bring all the read coverage in to a single dataframe.
+
+```{r}
+path = "/Users/lamprinos_rwth/Documents/results/32_copynumbervariation/"
+out.bedgraphs <-  "" #table to populate with bedgraphs
+file.names <- dir(path, pattern ="*bedgraph_overlap.all", full.names = TRUE)
+file.names2 <- dir(path, pattern ="*bedgraph_overlap.all") # this helps in fixing the labels of each sample
+file.names2 <- gsub(".bedgraph_overlap.all", "", file.names2, fixed = TRUE)
+file.names2 <- gsub("_genomic_2_dh14_lib1.sort.bam", "", file.names2, fixed = TRUE)
+
+for(i in 1:length(file.names)){
+  file <- read.table(file.names[i],sep="\t",header=F)
+  file <- cbind.data.frame(type = file.names2[i], file)
+  mean_depth <- mean(file$V4) #get average depth per effector
+  file <- cbind.data.frame(copynumber = file$V4/mean_depth, file) #get copynumber based on average effector coverage in the sample
+  out.bedgraphs <- rbind.data.frame(out.bedgraphs, file)
+}
+
+out.bedgraphs <- na.omit(out.bedgraphs) #removing NA values
+out.bedgraphs <- as.data.frame(out.bedgraphs)
+names(out.bedgraphs) <- c('copynumber','filename','scaffold','start','end','depth','scaffold_gene','start_gene','end_gene','name_gene') #change column names
+out.bedgraphs <- transform(out.bedgraphs, copynumber = as.numeric(copynumber)) #change type of column data
+
+effector_coverage <- aggregate(out.bedgraphs$copynumber, list(out.bedgraphs$name_gene,out.bedgraphs$filename), mean) #aggregate data
+names(effector_coverage) <- c('Gene','Species','CopyNumber')
+
+effector_coverage <- cbind.data.frame(copynumber_r = round(effector_coverage$CopyNumber,digits = 0), effector_coverage) #round up the copynumber values per effector
+effector_coverage <- transform(effector_coverage, copynumber_r = as.factor(copynumber_r)) # this helps with the visualization, converting copy number values to discrete
+
+
+## Trying to do hierarchical clustering
+efc_hclust <- effector_coverage[c(1:3)]
+efc_hclust.cast <- cast(efc_hclust,  Species ~ Gene, value = 'copynumber_r')
+efc_hclust.d <- dist(efc_hclust.cast, method = "euclidean")
+efc_hclust.h <- hclust(efc_hclust.d, "average")
+
+
+efc_hclust.cast.m <- as.matrix(efc_hclust.cast)
+storage.mode(efc_hclust.cast.m) <- "numeric"
+
+#For the main figure
+heatmap.2(efc_hclust.cast.m,
+          #revC = TRUE,
+          #margins =c(2,9),
+          symbreaks = FALSE,
+          trace="none",
+          col = colorpanel(10, low = 'snow',mid = 'indianred', high = 'black'),
+          Colv="NA",
+          dendrogram="row",
+          denscol = 'black',
+          cexRow = 0.75,
+          cexCol = 0.2,
+          key.title= '',
+          key.xlab = 'Copy Number',
+          scale = 'none',
+          keysize = 1,
+          colCol = 'grey',
+          main = 'Copy number variation between isolates',
+          xlab = 'Candidate Secreted Effector Proteins',
+          labCol = FALSE)
+```
+
+Additional calculations on how many SPs exists in all isolates and so on can be easily done with nrow, subset.
+
+Similarly for the control dataset. 
+
+I got 83 genes that have 'tubulin' or 'actin' description in their functional annotation domain after the InterPro analysis. These genes must be single copy and widely conserved.
+
+```{r}
+path = "/Users/lamprinos_rwth/Documents/results/32_copynumbervariation/non_secreted_genes/"
+out.bedgraphs <-  "" #table to populate with bedgraphs
+file.names <- dir(path, pattern ="*bedgraph-overlap.all", full.names = TRUE)
+file.names2 <- dir(path, pattern ="*bedgraph-overlap.all") # this helps in fixing the labels of each sample
+file.names2 <- gsub(".bedgraph-overlap.all", "", file.names2, fixed = TRUE)
+file.names2 <- gsub("_genomic_2_dh14_lib1.sort.bam", "", file.names2, fixed = TRUE)
+
+for(i in 1:length(file.names)){
+  file <- read.table(file.names[i],sep="\t",header=F)
+  file <- cbind.data.frame(type = file.names2[i], file)
+  mean_depth <- mean(file$V4) #get average depth per effector
+  file <- cbind.data.frame(copynumber = file$V4/mean_depth, file) #get copynumber based on average effector coverage in the sample
+  out.bedgraphs <- rbind.data.frame(out.bedgraphs, file)
+}
+
+out.bedgraphs <- na.omit(out.bedgraphs) #removing NA values
+out.bedgraphs <- as.data.frame(out.bedgraphs)
+names(out.bedgraphs) <- c('copynumber','filename','scaffold','start','end','depth','scaffold_gene','start_gene','end_gene','name_gene') #change column names
+out.bedgraphs <- transform(out.bedgraphs, copynumber = as.numeric(copynumber)) #change type of column data
+
+effector_coverage <- aggregate(out.bedgraphs$copynumber, list(out.bedgraphs$name_gene,out.bedgraphs$filename), mean) #aggregate data
+names(effector_coverage) <- c('Gene','Species','CopyNumber')
+
+effector_coverage <- cbind.data.frame(copynumber_r = round(effector_coverage$CopyNumber,digits = 0), effector_coverage) #round up the copynumber values per effector
+effector_coverage <- transform(effector_coverage, copynumber_r = as.factor(copynumber_r)) # this helps with the visualization, converting copy number values to discrete
+
+
+
+efc_hclust <- effector_coverage[c(1:3)]
+efc_hclust.cast <- cast(efc_hclust,  Species ~ Gene, value = 'copynumber_r')
+
+
+efc_hclust.cast.m <- as.matrix(efc_hclust.cast)
+storage.mode(efc_hclust.cast.m) <- "numeric"
+
+#For the main figure
+heatmap.2(efc_hclust.cast.m,
+          #revC = TRUE,
+          margins =c(2,9),
+          symbreaks = FALSE,
+          trace="none",
+          col = colorpanel(3, low = 'snow',mid = 'indianred', high = 'black'),
+          Colv="NA",
+          dendrogram="row",
+          denscol = 'black',
+          cexRow = 0.75,
+          cexCol = 0.2,
+          key.title= '',
+          key.xlab = 'Copy Number',
+          scale = 'none',
+          keysize = 1,
+          colCol = 'grey',
+          main = 'Copy number variation between isolates\nControl dataset',
+          xlab = 'Genes with tubulin or actin PFAM domains',
+          labCol = FALSE)
+```
+
+
+
+# 2. COPY NUMBER VARIATION - Figure 3B
+
+The nucleotide sequences of the different high-copy SPs were aligned with the EMBOSS Needle tools to get a table of pairwise alignment table. This table (for_tree.lst.pc.id) was later imported to R, to generate the figure.
+
+```{r}
+table1 <- read.table('~/for_tree.lst.pc.id')
+
+table1.m <- matrix( table1[,-1:-2], dimnames = list(table1$V2,table1$V2))
+table1.m <- as.matrix(table1[,-1:-2], dimnames = list(table1$V2,table1$V2))
+row.names(table1.m) <- table1$V2
+colnames(table1.m) <- table1$V2
+
+heatmap.2(table1.m,
+        #revC = TRUE,
+        margins =c(10,10),
+        trace="none",
+        col = colorpanel(10, low = 'navyblue',mid = 'snow', high = 'indianred'),
+        dendrogram="none",
+        denscol = NA,
+        cexRow = 0.75,
+        cexCol = 0.75,
+        key.title= '',
+        key.xlab = '% Identity',
+        scale = 'none',
+        keysize = 1,
+        colCol = 'grey',
+        main = 'Pairwise nucleotide %identity\nof multicopy (>3) SPs')
+        #labCol = TRUE)
+```
+
+For make the heatmap with the maximum values the matrix that was used for the heatmap in Figure 3A was exported and with a short bash script I got the max values
+
+```{bash}
+### for_tree.lst is the list with the multicopy genes
+### species.lst is the f.sp. list
+
+for gene in `cat for_tree.lst`;do
+for spec in `cat species.lst`;do
+maxval=$(grep $gene effector_coverage.csv | grep $spec | cut -f2 -d ',' | tr -d '"' | sort -n | tail -n 1)
+echo $gene ' ' $spec ' ' $maxval
+done
+done
+```
+
+The output was imported in R
+
+```{r}
+table2 <- read.table('~/tree_nums2.melt.tsv')
+colnames(table2) <- c('gene','fsp','copy')
+table2$copy <- as.factor(table2$copy)
+
+ggplot(table2)+
+  geom_tile(aes(fsp,gene, fill = copy))+
+  scale_fill_brewer(type = 'qual', palette = 'BuGn') +
+  theme_minimal()
+```
+
+# 3. REPEAT LANDSCAPES AND ORTHOFINDER RESULTS - Figure 4
+
+For the Figure 4A. First we import the OrthoFinder results for the analysis.
+
+```{r}
+table1 <- read.csv("~/Orthogroups_SpeciesOverlaps3.csv",row.names = 1, header=TRUE, sep = ";")
+
+orthogr_m <- as.matrix(table1)
+orthogr_m[upper.tri(orthogr_m)] <- NA
+orthogr_m[,]<- orthogr_m[,]*100
+
+heatmap.2(orthogr_m,
+          reorderfun = function(d, w) reorder(d, w),
+          symm = TRUE,
+          #na.rm = TRUE,
+          Rowv = 'NA',
+          #revC = TRUE,
+          #margins =c(20,10),
+          #symbreaks = FALSE,
+          trace="none",
+          col = colorpanel(10, low = 'lightsteelblue1',mid = 'steelblue2', high = 'steelblue4'),
+          dendrogram="none",
+          density.info = 'none',
+          #denscol = 'black',
+          cexRow = 1,
+          cexCol = 1,
+          key.title= '',
+          key.xlab = '% shared orthogroups',
+          scale = 'none',
+          keysize = 1,
+          colCol = 'grey',
+          main = 'Shared Orthogroups')
+```
+
+This essentially shows that the genomes examined here are orthologous and closely related. Now we can do further comparisons with this dataset
+
+For the pie charts in the Figure 4B
+```{r}
+# table1 contains the parsed results from the .tbl RepeatMarker output file for every species examined
+
+table1 <- read.table('~/repeatmasker_results_for_all.csv', sep = ';', header = T)
+table2 <- cbind.data.frame(table1$Species,table1$LINES,table1$SINEs,table1$LTR,table1$DNA.transposons,table1$Unclassified,table1$Simple.repeats,table1$Non.repetitive)
+colnames(table2) <- c('Species','LINEs','SINEs','LTR','DNA','Unclassified','Simple','Non_repetitive')
+table2 <- melt(data = table2, 'Species')
+
+
+
+ggplot(table2,aes(factor(1), weight = value, fill = variable))+ 
+  geom_bar()  +
+  scale_fill_brewer(palette="BuPu")+
+  coord_polar(theta = "y")+
+  facet_wrap( ~Species, ncol = 6)+
+  theme_minimal()+
+  theme(axis.text.y = element_blank(), 
+        axis.text.x = element_blank() ,
+        strip.text = element_text(size = 4),
+        line = element_blank()) 
+
+  
+```
+
+
+For the Figure 4C
+Proceeding with the repeat landscapes plot. 
+
+```{bash}
+# For every genome use Repeatmasker to annotate the repeats:
+~/RepeatMasker -species fungi -excln -gff -no_is -a -pa 8 $file
+# Parse results
+perl ~/Parsing-RepeatMasker-Outputs/parseRM.pl -i $file.aln -f $file -l 50,1 -v
+
+# Then you can merge all the *.Div.Rclass.tab files and import in R
+
+```
+
+```{r}
+# table.csv contains the merged *.Div.Rclass.tab files
+
+table1 <- read.csv("~/table.csv",header=TRUE, sep = ";")
+colnames(table1) <- c('Species','Type',c(1:50))
+
+
+# Reshape the data for ggplot
+traff2 <- melt(table1,id=c("Species","Type"), variable_name = "Div")
+
+# Remove the X in the Divergence column and convert it to number
+traff2$Div <- as.numeric(gsub(pattern="X",replacement = "",x = as.character(traff2$Div)))
+
+# The data is ready for ggplot
+
+table1_clean <- table1[grep('LTR|LINE|DNA|Retroposon|SINE',table1$Type, perl = TRUE),]
+traff2 <- melt(table1_clean,id=c("Species","Type"), variable_name = "Div")
+traff2$Div <- as.numeric(gsub(pattern="X",replacement = "",x = as.character(traff2$Div)))
+
+ggplot(traff2, aes(x = Div , y = value, fill = Type))+
+  facet_wrap(facets = ~Species, scales = "free_y", shrink = FALSE,  ncol = 3)+
+  geom_bar(stat = 'identity', color = 'black')+
+  theme_minimal()+
+  scale_fill_brewer(palette="Set2") +
+  labs( x="Divergence (%)", y = "Sequence (bp)")+
+  ggtitle("Landscape plots of transposon divergence" )  +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, size = 9, hjust = 1), plot.title = element_text(hjust=0.5)) 
+
+```
+
+# 4. CORE EFFECTOROME TREE - Suppl. Figure 8B
+
+Generation of the tree with IQ-TREE might take 1-2 weeks.
+
+You import the treefile.nexus tree that is the output of the IQ-TREE. 
+
+```{r}
+
+mytree <- read.nexus('~/treefile.nexus')
+
+# These are the core blumeria effectors, after the Orthofinder analysis and the blasting to the nr
+
+core_uniq <- c("BLGH_00023","BLGH_00024","BLGH_00025","BLGH_00026","BLGH_00027","BLGH_00028","BLGH_00029","BLGH_00030","BLGH_00031",
+"BLGH_00032","BLGH_00033","BLGH_00034","BLGH_00279","BLGH_00344","BLGH_00379","BLGH_00432","BLGH_00437","BLGH_00464",
+"BLGH_00510","BLGH_00730","BLGH_00732","BLGH_00733","BLGH_00969","BLGH_01089","BLGH_01483","BLGH_01558","BLGH_01564",
+"BLGH_01616","BLGH_01637","BLGH_01641","BLGH_01650","BLGH_01670","BLGH_01682","BLGH_01683","BLGH_01687","BLGH_01984",
+"BLGH_02064","BLGH_02072","BLGH_02098","BLGH_02099","BLGH_02100","BLGH_02141","BLGH_02144","BLGH_02307","BLGH_02415",
+"BLGH_02416","BLGH_02440","BLGH_02483","BLGH_02628","BLGH_02693","BLGH_02694","BLGH_02695","BLGH_02705","BLGH_02706",
+"BLGH_02707","BLGH_02708","BLGH_02709","BLGH_02710","BLGH_02715","BLGH_02716","BLGH_02717","BLGH_02719","BLGH_02720",
+"BLGH_02722","BLGH_02724","BLGH_02725","BLGH_02727","BLGH_02729","BLGH_02730","BLGH_02731","BLGH_02732","BLGH_02733",
+"BLGH_02736","BLGH_02737","BLGH_02738","BLGH_02741","BLGH_02742","BLGH_02744","BLGH_02748","BLGH_02927","BLGH_02938",
+"BLGH_03102","BLGH_03164","BLGH_03165","BLGH_03168","BLGH_03214","BLGH_03215","BLGH_03354","BLGH_03653","BLGH_03782",
+"BLGH_03784","BLGH_03785","BLGH_03788","BLGH_03789","BLGH_03792","BLGH_03844","BLGH_03870","BLGH_03873","BLGH_03911",
+"BLGH_03916","BLGH_03974","BLGH_04233","BLGH_04260","BLGH_04305","BLGH_04342","BLGH_04346","BLGH_04351","BLGH_04352",
+"BLGH_04353","BLGH_04363","BLGH_04481","BLGH_04489","BLGH_04620","BLGH_04692","BLGH_04703","BLGH_04704","BLGH_04707",
+"BLGH_04732","BLGH_04769","BLGH_04774","BLGH_04796","BLGH_04852","BLGH_04876","BLGH_04888","BLGH_04889","BLGH_04892",
+"BLGH_04895","BLGH_04896","BLGH_04903","BLGH_04937","BLGH_04938","BLGH_04948","BLGH_04981","BLGH_05020","BLGH_05021",
+"BLGH_05198","BLGH_05276","BLGH_05279","BLGH_05293","BLGH_05321","BLGH_05376","BLGH_05380","BLGH_05395","BLGH_05439",
+"BLGH_05441","BLGH_05448","BLGH_05467","BLGH_05495","BLGH_05581","BLGH_05582","BLGH_05626","BLGH_05670","BLGH_05671",
+"BLGH_05718","BLGH_05781","BLGH_05903","BLGH_06152","BLGH_06209","BLGH_06211","BLGH_06214","BLGH_06341","BLGH_06372",
+"BLGH_06375","BLGH_06379","BLGH_06409","BLGH_06410","BLGH_06418","BLGH_06436","BLGH_06503","BLGH_06504","BLGH_06513",
+"BLGH_06522","BLGH_06525","BLGH_06540","BLGH_06547","BLGH_06557","BLGH_06558","BLGH_06559","BLGH_06591","BLGH_06593",
+"BLGH_06599","BLGH_06603","BLGH_06611","BLGH_06628","BLGH_06629","BLGH_06745","BLGH_06746","BLGH_06862","BLGH_06976",
+"BLGH_07024","BLGH_07096")
+
+colz <- ifelse(mytree$tip.label %in% core_uniq, "orangered", "transparent")
+colz <- cbind(mytree$tip.label,colz)
+colz <- as.data.frame(colz, stringsAsFactors=FALSE)
+
+plot(mytree, type = 'unrooted', 
+     label.offset=0.75,
+     font = 1,
+     cex = 0.3,
+     show.tip.label = FALSE,
+     tip.color = as.character(colz$colz),
+     edge.width = 0.5,
+     rotate.tree = 90,
+     lab4ut =  'axial',
+     underscore = TRUE,
+     #align.tip.label = 0,
+)
+tiplabels(pch=20,cex =1, col = as.character(colz$colz))
+add.scale.bar(cex = 0.7, font = 2, col = "grey", length = 1 )
+```
+
+
+# 5. FLANKING ELEMENTS - Suppl. Figure 2B
+
+This part produces a figure showing that the transposons flank both secreted and non-secreted genes. You have to parse the RepeatMasker output file together with the genes and secreted coding genes bed files to calculate distances. These distances can be calculated using bedtools closest.
+
+```{r}
+## Load the data
+down_secr <- read.table("~/downstream_closest.dna-line-ltr-repeats-sines-unclassified.secreted.tab")
+down_non_secr <- read.table("~/downstream_closest.dna-line-ltr-repeats-sines-unclassified.nonsecreted.tab")
+up_secr <- read.table("~/upstream_closest.dna-line-ltr-repeats-sines-unclassified.secreted.tab")
+up_non_secr <- read.table("~/upstream_closest.dna-line-ltr-repeats-sines-unclassified.nonsecreted.tab")
+
+## Naming the columns
+names(down_secr) <- c('Scaffold','Gene','DNA_transp','Mariner-1/2','LINE','Tad1/HaTad1','LTR','Gypsy/LTR/Copia','Simple_repeat','Simple repeats','SINE','SINE2','Unclassified','EGRT1/NonLTR')
+names(up_secr) <- c('Scaffold','Gene','DNA_transp','Mariner-1/2','LINE','Tad1/HaTad1','LTR','Gypsy/LTR/Copia','Simple_repeat','Simple repeats','SINE','SINE2','Unclassified','EGRT1/NonLTR')
+names(down_non_secr) <- c('Scaffold','Gene','DNA_transp','Mariner-1/2','LINE','Tad1/HaTad1','LTR','Gypsy/LTR/Copia','Simple_repeat','Simple repeats','SINE','SINE2','Unclassified','EGRT1/NonLTR')
+names(up_non_secr) <- c('Scaffold','Gene','DNA_transp','Mariner-1/2','LINE','Tad1/HaTad1','LTR','Gypsy/LTR/Copia','Simple_repeat','Simple repeats','SINE','SINE2','Unclassified','EGRT1/NonLTR')
+
+## Preparing the data frame
+down_secr <- cbind(flank_type = 'Downstream, secreted', down_secr)
+up_secr <- cbind(flank_type = 'Upstream, secreted', up_secr)
+down_non_secr <- cbind(flank_type = 'Downstream, non-secreted', down_non_secr)
+up_non_secr <- cbind(flank_type = 'Upstream, non-secreted', up_non_secr)
+
+## Removing non-sense values coming either from being at the end of the contigs or by not having a "closest" element in a given category
+down_secr[down_secr == -1] <- NA
+down_non_secr[down_non_secr == -1] <- NA
+up_secr[up_secr == 1] <- NA
+up_non_secr[up_non_secr == 1] <- NA
+all_data <- rbind(up_non_secr,down_non_secr,up_secr,down_secr)
+
+## Preparing the tables, and removing unnecessary rows
+all_data_sub = all_data[,c(1,5,7,9,11,13,15)]
+all_data_sub_melt = melt(all_data_sub, id=c("flank_type"))
+
+
+## Plotting - I think that's the best way to do it, not very visually pleasing but ok
+ggplot(all_data_sub_melt) +
+  geom_freqpoly(aes(x=value, colour=variable), binwidth = 1000) +
+  scale_colour_brewer(palette = "Paired", name="Types") +
+  facet_wrap( ~ flank_type )+
+  ggtitle("Types repetive elements upstream and downstream of the genes" ) +
+  theme_minimal()  +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, size = 9, hjust = 1), plot.title = element_text(hjust=0.5)) +
+  labs(x= "Distance (bp)", y = "Frequency") +
+  coord_cartesian(xlim = c(-10000, 10000))
+```
+# 6. CENTROMERIC REGIONS - Suppl. Figure 2A
+
+Here you again have to use several bed files that can be derived from the annotation gff and the RepeatMasker gff or .out output file. 
+
+Then you select scaffolds that have telomeric repeats, or scaffolds with long gene sparse regions.
+
+```{r}
+
+
+genes <- read.table('~/scaffolds_with_telomeres.lst.genes.bed', sep = '\t',header = F)
+linez <- read.table('~/line_transposons.bed', sep = '\t',header = F)
+retro <- read.table('~/retrotransposons.bed', sep = '\t',header = F)
+others <- read.table('~/othertransposons.bed', sep = '\t',header = F)
+centromeric <- read.table('~/centromeric_tad.bed', sep = '\t',header = F)
+
+genes <- cbind(genes, 'Genes')
+linez <- cbind(linez, 'LINE')
+retro <- cbind(retro, 'Retroelements')
+others <- cbind(others, 'Other')
+centro <- cbind(centromeric, 'centro')
+
+colnames(genes) <- c('scaffold','start','stop','id','type')
+colnames(linez) <- c('scaffold','start','stop','id','type')
+colnames(retro) <- c('scaffold','start','stop','id','type')
+colnames(others) <- c('scaffold','start','stop','id','type')
+colnames(centro) <- c('scaffold','start','stop','id','type')
+
+#centro <- subset(centro, id == 'Tad1-43B_BG')
+
+dat <- rbind(genes,linez,retro,others)
+
+ggplot(dat)+ 
+  geom_joy(data = centro, aes(x =start , y = id),fill = 'lightgreen' ,bandwidth = 50000)+
+  geom_joy(aes(x =start , y = type) ,bandwidth = 50000)+
+  labs(title = 'Gene and repetitive element density',
+        subtitle = 'Density of elements per 50kb in scaffolds that contain telomeric sequences') +
+    theme_joy(font_size = 8, grid = T) + theme(axis.title.y = element_blank()) +
+  scale_x_continuous()+
+  facet_wrap(~ scaffold, ncol = 2, scales = 'free_x')
+```
+
+# 7. 5' and 3' intergenic lengths - Figure 4B
+
+You can use bedtools to calculate the 5' and 3' intergenic distance, as long as you are aware of the direction of the genes:
+
+```{bash}
+#This is to generate the bed files for R
+
+bioawk -c fastx '{print $name,length($seq)}' bgh_dh14_v4.fa > chr.sizes
+
+bedtools complement -i sorted.bgh_dh14_v4_CDS.bed -g chr.sizes  > intergenic_spaces.bed
+
+bedtools closest -D a -a sorted.bgh_dh14_v4_CDS.bed -b intergenic_spaces.bed -g chr.sizes > intergenic_spaces.bed2R
+
+grep -f cseps805.lst intergenic_spaces.bed2R > intergenic_spaces.bed2R_cseps
+
+```
+
+Then you can insert the results into R to generate the final figure:
+
+```{r}
+
+#load all genes
+table <- read.table('/Users/lamprinos_rwth/Documents/results/42_kamoun_plot/intergenic_spaces.bed2R', header = F)
+colnames(table) <- c('Scaffold','Gene_start','Gene_end','Gene_name','Scaffold_inter','Intergen_start','Intergen_stop','UpDown')
+table['Inter_size'] <- table$Intergen_stop - table$Intergen_start
+
+table_up <- subset.data.frame(table, UpDown > 0)
+table_down <- subset.data.frame(table, UpDown < 0)
+
+table2 <- merge(table_up, table_down, by ='Gene_name')
+
+
+#load SPs so you can overlay on top
+tablec <- read.table('/Users/lamprinos_rwth/Documents/results/42_kamoun_plot/intergenic_spaces.bed2R_cseps', header = F)
+colnames(tablec) <- c('Scaffold','Gene_start','Gene_end','Gene_name','Scaffold_inter','Intergen_start','Intergen_stop','UpDown')
+tablec['Inter_size'] <- tablec$Intergen_stop - tablec$Intergen_start
+
+tablec_up <- subset.data.frame(tablec, UpDown > 0)
+tablec_down <- subset.data.frame(tablec, UpDown < 0)
+
+table2c <- merge(tablec_up, tablec_down, by ='Gene_name')
+
+#Annotate secreted and non secreted
+table2$group <- "Non SP"
+table2$group[table2$Gene_name %in% table2c$Gene_name] <- "SP"
+
+
+ggplot(table2, aes(x= Inter_size.x,y=Inter_size.y)) +
+  geom_hex()+
+  scale_fill_distiller(palette = "Spectral", name="Gene\ncount")+
+  geom_point(data=subset(table2, group == "SP"), color = 'black',alpha = 0.25)+
+  geom_point(data=subset(table2, Gene_name == "BLGH_03023"), color = 'orange',alpha = 1)+
+  geom_point(data=subset(table2, Gene_name == "BLGH_03022"), color = 'orange',alpha = 1)+
+  geom_point(data=subset(table2, Gene_name == "BLGH_02099"), color = 'red',alpha = 1)+
+  scale_x_log10()+
+  scale_y_log10()+
+  ylab("5' prime intergenic length (bp)") +
+  xlab("3' prime intergenic length (bp)") +
+  
+  theme_minimal()
+
+
+```
+
+
+
