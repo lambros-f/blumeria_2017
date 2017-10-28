@@ -19,9 +19,6 @@ library(cluster)
 library(ggjoy)
 library(ape)
 library(geiger)
-
-
-
 ```
 
 # 1. COPY NUMBER VARIATION - Figure 3A
@@ -50,7 +47,7 @@ $bedtools intersect -wb -b secreted.bed -a $isolate.sorted.bam.bedgraph > $isola
 Go in to the folder with the stored bedgraphs and read the files. Then bring all the read coverage in to a single dataframe.
 
 ```{r}
-path = "/Users/lamprinos_rwth/Documents/results/32_copynumbervariation/"
+path = "your_path"
 out.bedgraphs <-  "" #table to populate with bedgraphs
 file.names <- dir(path, pattern ="*bedgraph_overlap.all", full.names = TRUE)
 file.names2 <- dir(path, pattern ="*bedgraph_overlap.all") # this helps in fixing the labels of each sample
@@ -113,10 +110,10 @@ Additional calculations on how many SPs exists in all isolates and so on can be 
 
 Similarly for the control dataset. 
 
-I got 83 genes that have 'tubulin' or 'actin' description in their functional annotation domain after the InterPro analysis. These genes must be single copy and widely conserved.
+I got 83 genes that have 'tubulin', 'actin' description in their functional annotation domain after the InterPro analysis or they are non-SPs. 
 
 ```{r}
-path = "/Users/lamprinos_rwth/Documents/results/32_copynumbervariation/non_secreted_genes/"
+path = "your_path"
 out.bedgraphs <-  "" #table to populate with bedgraphs
 file.names <- dir(path, pattern ="*bedgraph-overlap.all", full.names = TRUE)
 file.names2 <- dir(path, pattern ="*bedgraph-overlap.all") # this helps in fixing the labels of each sample
@@ -174,13 +171,12 @@ heatmap.2(efc_hclust.cast.m,
 ```
 
 
-
 # 2. COPY NUMBER VARIATION - Figure 3B
 
 The nucleotide sequences of the different high-copy SPs were aligned with the EMBOSS Needle tools to get a table of pairwise alignment table. This table (for_tree.lst.pc.id) was later imported to R, to generate the figure.
 
 ```{r}
-table1 <- read.table('~/for_tree.lst.pc.id')
+table1 <- read.table('~/for_tree.lst.pc.id') #This is the nucleotide identity matrix from the alignment.
 
 table1.m <- matrix( table1[,-1:-2], dimnames = list(table1$V2,table1$V2))
 table1.m <- as.matrix(table1[,-1:-2], dimnames = list(table1$V2,table1$V2))
@@ -210,6 +206,7 @@ For make the heatmap with the maximum values the matrix that was used for the he
 ```{bash}
 ### for_tree.lst is the list with the multicopy genes
 ### species.lst is the f.sp. list
+### output to tree_nums2.melt.tsv
 
 for gene in `cat for_tree.lst`;do
 for spec in `cat species.lst`;do
@@ -233,6 +230,7 @@ ggplot(table2)+
 ```
 
 # 3. REPEAT LANDSCAPES AND ORTHOFINDER RESULTS - Figure 4
+
 
 For the Figure 4A. First we import the OrthoFinder results for the analysis.
 
@@ -308,9 +306,9 @@ perl ~/Parsing-RepeatMasker-Outputs/parseRM.pl -i $file.aln -f $file -l 50,1 -v
 ```
 
 ```{r}
-# table.csv contains the merged *.Div.Rclass.tab files
+# table_repeatlandscapes.csv contains the merged *.Div.Rclass.tab files, you can have multiple or single species
 
-table1 <- read.csv("~/table.csv",header=TRUE, sep = ";")
+table1 <- read.csv("~/table_repeatlandscapes.csv",header=TRUE, sep = ";")
 colnames(table1) <- c('Species','Type',c(1:50))
 
 
@@ -385,7 +383,7 @@ plot(mytree, type = 'unrooted',
      edge.width = 0.5,
      rotate.tree = 90,
      lab4ut =  'axial',
-     underscore = TRUE,
+     underscore = TRUE
      #align.tip.label = 0,
 )
 tiplabels(pch=20,cex =1, col = as.character(colz$colz))
@@ -397,8 +395,50 @@ add.scale.bar(cex = 0.7, font = 2, col = "grey", length = 1 )
 
 This part produces a figure showing that the transposons flank both secreted and non-secreted genes. You have to parse the RepeatMasker output file together with the genes and secreted coding genes bed files to calculate distances. These distances can be calculated using bedtools closest.
 
+You also have to take care to correct the files for the direction of the genes. A bash script doing this, could look like this:
+```{bash}
+###MERGE TABLES comming from bedtools
+echo 'start'
+paste upstream_closest.*.nonsecreted.tab | cut -f1,2,3,4,7,8,11,12,15,16,19,20,23,24 > ../upstream_closest.dna-line-ltr-repeats-sines-unclassified.nonsecreted.tab
+paste upstream_closest.*.secreted.tab | cut -f1,2,3,4,7,8,11,12,15,16,19,20,23,24 > ../upstream_closest.dna-line-ltr-repeats-sines-unclassified.secreted.tab
+paste downstream_closest.*.secreted.tab | cut -f1,2,3,4,7,8,11,12,15,16,19,20,23,24 > ../downstream_closest.dna-line-ltr-repeats-sines-unclassified.secreted.tab
+paste downstream_closest.*.nonsecreted.tab | cut -f1,2,3,4,7,8,11,12,15,16,19,20,23,24 > ../downstream_closest.dna-line-ltr-repeats-sines-unclassified.nonsecreted.tab
+
+###CORRECT FOR STRANDNESS OF GENES
+echo '1'
+grep -f strand_per_gene.lst_negative ../downstream_closest.dna-line-ltr-repeats-sines-unclassified.secreted.tab | awk '{print $1,$2,$3,$4*-1,$5,$6*-1,$7,$8*-1,$9,$10*-1,$11,$12*-1,$13,$14*-1}' > ups1
+grep -vf strand_per_gene.lst_negative ../downstream_closest.dna-line-ltr-repeats-sines-unclassified.secreted.tab  > ds2
+echo '2'
+grep -f strand_per_gene.lst_negative ../upstream_closest.dna-line-ltr-repeats-sines-unclassified.secreted.tab | awk '{print $1,$2,$3,$4*-1,$5,$6*-1,$7,$8*-1,$9,$10*-1,$11,$12*-1,$13,$14*-1}' > ds1
+grep -vf strand_per_gene.lst_negative ../upstream_closest.dna-line-ltr-repeats-sines-unclassified.secreted.tab > ups2
+echo '3'
+
+grep -f strand_per_gene.lst_negative ../downstream_closest.dna-line-ltr-repeats-sines-unclassified.nonsecreted.tab | awk '{print $1,$2,$3,$4*-1,$5,$6*-1,$7,$8*-1,$9,$10*-1,$11,$12*-1,$13,$14*-1}' > up1
+grep -vf strand_per_gene.lst_negative ../downstream_closest.dna-line-ltr-repeats-sines-unclassified.nonsecreted.tab > dn2
+echo '4'
+grep -f strand_per_gene.lst_negative ../upstream_closest.dna-line-ltr-repeats-sines-unclassified.nonsecreted.tab | awk '{print $1,$2,$3,$4*-1,$5,$6*-1,$7,$8*-1,$9,$10*-1,$11,$12*-1,$13,$14*-1}' > dn1
+grep -vf strand_per_gene.lst_negative ../upstream_closest.dna-line-ltr-repeats-sines-unclassified.nonsecreted.tab > up2
+
+echo '5'
+cat ds1 ds2 > ../downstream_closest.dna-line-ltr-repeats-sines-unclassified.secreted.tab
+cat ups1 ups2 > ../upstream_closest.dna-line-ltr-repeats-sines-unclassified.secreted.tab
+cat dn1 dn2 > ../downstream_closest.dna-line-ltr-repeats-sines-unclassified.nonsecreted.tab
+cat up1 up2 > ../upstream_closest.dna-line-ltr-repeats-sines-unclassified.nonsecreted.tab
+
+echo 'done'
+
+
+```
+
 ```{r}
 ## Load the data
+## You might need to convert the tabs if you're working on Macs with a bash script, for example:
+#for file in ` ls *.tab | cut -f1 `; do
+#echo $file
+#sed 's/ /	/g' $file > 1 && mv 1 $file-1.tab
+#done
+
+
 down_secr <- read.table("~/downstream_closest.dna-line-ltr-repeats-sines-unclassified.secreted.tab")
 down_non_secr <- read.table("~/downstream_closest.dna-line-ltr-repeats-sines-unclassified.nonsecreted.tab")
 up_secr <- read.table("~/upstream_closest.dna-line-ltr-repeats-sines-unclassified.secreted.tab")
@@ -443,7 +483,7 @@ ggplot(all_data_sub_melt) +
 
 Here you again have to use several bed files that can be derived from the annotation gff and the RepeatMasker gff or .out output file. 
 
-Then you select scaffolds that have telomeric repeats, or scaffolds with long gene sparse regions.
+Then you can select scaffolds that have telomeric repeats, or scaffolds with long gene sparse regions.
 
 ```{r}
 
@@ -502,7 +542,7 @@ Then you can insert the results into R to generate the final figure:
 ```{r}
 
 #load all genes
-table <- read.table('/Users/lamprinos_rwth/Documents/results/42_kamoun_plot/intergenic_spaces.bed2R', header = F)
+table <- read.table('~/intergenic_spaces.bed2R', header = F)
 colnames(table) <- c('Scaffold','Gene_start','Gene_end','Gene_name','Scaffold_inter','Intergen_start','Intergen_stop','UpDown')
 table['Inter_size'] <- table$Intergen_stop - table$Intergen_start
 
@@ -513,7 +553,7 @@ table2 <- merge(table_up, table_down, by ='Gene_name')
 
 
 #load SPs so you can overlay on top
-tablec <- read.table('/Users/lamprinos_rwth/Documents/results/42_kamoun_plot/intergenic_spaces.bed2R_cseps', header = F)
+tablec <- read.table('~/intergenic_spaces.bed2R_cseps', header = F)
 colnames(tablec) <- c('Scaffold','Gene_start','Gene_end','Gene_name','Scaffold_inter','Intergen_start','Intergen_stop','UpDown')
 tablec['Inter_size'] <- tablec$Intergen_stop - tablec$Intergen_start
 
