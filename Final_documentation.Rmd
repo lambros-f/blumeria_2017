@@ -21,7 +21,7 @@ library(ape)
 library(geiger)
 ```
 
-# 1. COPY NUMBER VARIATION - Figure 3A
+# 1. COPY NUMBER VARIATION - Figure 3
 
 This script produces the copy number variation heatmap.
 
@@ -171,7 +171,7 @@ heatmap.2(efc_hclust.cast.m,
 ```
 
 
-# 2. COPY NUMBER VARIATION - Figure 3B
+# 2. COPY NUMBER VARIATION - Figure 3
 
 The nucleotide sequences of the different high-copy SPs were aligned with the EMBOSS Needle tools to get a table of pairwise alignment table. This table (for_tree.lst.pc.id) was later imported to R, to generate the figure.
 
@@ -229,10 +229,10 @@ ggplot(table2)+
   theme_minimal()
 ```
 
-# 3. REPEAT LANDSCAPES AND ORTHOFINDER RESULTS - Figure 4
+# 3. REPEAT LANDSCAPES AND ORTHOFINDER RESULTS - Figure 5
 
 
-For the Figure 4A. First we import the OrthoFinder results for the analysis.
+For the Figure 5A. First we import the OrthoFinder results for the analysis.
 
 ```{r}
 table1 <- read.csv("~/Orthogroups_SpeciesOverlaps3.csv",row.names = 1, header=TRUE, sep = ";")
@@ -266,7 +266,7 @@ heatmap.2(orthogr_m,
 
 This essentially shows that the genomes examined here are orthologous and closely related. Now we can do further comparisons with this dataset
 
-For the pie charts in the Figure 4B
+For the pie charts in the Figure 5B
 ```{r}
 # table1 contains the parsed results from the .tbl RepeatMarker output file for every species examined
 
@@ -292,7 +292,7 @@ ggplot(table2,aes(factor(1), weight = value, fill = variable))+
 ```
 
 
-For the Figure 4C
+For the Figure 5C
 Proceeding with the repeat landscapes plot. 
 
 ```{bash}
@@ -335,7 +335,7 @@ ggplot(traff2, aes(x = Div , y = value, fill = Type))+
 
 ```
 
-# 4. CORE EFFECTOROME TREE - Suppl. Figure 8B
+# 4. CORE EFFECTOROME TREE - Suppl. Figure 10
 
 Generation of the tree with IQ-TREE might take 1-2 weeks.
 
@@ -391,7 +391,7 @@ add.scale.bar(cex = 0.7, font = 2, col = "grey", length = 1 )
 ```
 
 
-# 5. FLANKING ELEMENTS - Suppl. Figure 2B
+# 5. FLANKING ELEMENTS - Figure 4
 
 This part produces a figure showing that the transposons flank both secreted and non-secreted genes. You have to parse the RepeatMasker output file together with the genes and secreted coding genes bed files to calculate distances. These distances can be calculated using bedtools closest.
 
@@ -479,7 +479,7 @@ ggplot(all_data_sub_melt) +
   labs(x= "Distance (bp)", y = "Frequency") +
   coord_cartesian(xlim = c(-10000, 10000))
 ```
-# 6. CENTROMERIC REGIONS - Suppl. Figure 2A
+# 6. CENTROMERIC REGIONS - Suppl. Figure 2
 
 Here you again have to use several bed files that can be derived from the annotation gff and the RepeatMasker gff or .out output file. 
 
@@ -520,7 +520,7 @@ ggplot(dat)+
   facet_wrap(~ scaffold, ncol = 2, scales = 'free_x')
 ```
 
-# 7. 5' and 3' intergenic lengths - Figure 4B
+# 7. 5' and 3' intergenic lengths - Figure 4
 
 You can use bedtools to calculate the 5' and 3' intergenic distance, as long as you are aware of the direction of the genes:
 
