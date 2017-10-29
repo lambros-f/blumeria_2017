@@ -7,6 +7,11 @@ Figure | Filename | Comments
 ------- | ------- | ------
 Figure 3C | 01_Mapping_SNP_Splitstree.sh | Mapping with BWA and following the GATK pipeline with alteration suggested in the TSL workshop
 Figure 3A | 02_CopyNumberVariation.sh | Bash was used to generate the bed files, please also look in Final_documentation.Rmd
-Figure 4B | Final_documentation.Rmd | Intergenic distance plots
-Figure 5A | Final_documentation.Rmd | Landscapes for Figure 4A, in R
+Figures 3,4,5 | Final_documentation.Rmd | R markdown with scripts
+Suppl. Figure 2,8-11 | Final_documentation.Rmd | R markdown with scripts
+
+Intermediate analysis files can be found in the folder "useful_files".
+
+For questions or more information please email lamprinos.frantzeskakis [at] rwth-aachen.de
+
 
