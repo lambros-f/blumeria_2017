@@ -585,4 +585,72 @@ ggplot(table2, aes(x= Inter_size.x,y=Inter_size.y)) +
 ```
 
 
+# 8. Supplemetary Figure 2B and C
 
+```{r}
+#Continuing with the previous tables...
+#We also need these data, can be found in the useful_files folder
+dnds <- read.table('/Users/lamprinos_rwth/Documents/results/42_kamoun_plot/Summary_dNdS_DH14_RACE1.txt', header = T)
+cogs <- read.table('/Users/lamprinos_rwth/Documents/results/42_kamoun_plot/cog.lst', header = T)
+#All SPs
+sps <-  read.table('/Users/lamprinos_rwth/Documents/results/42_kamoun_plot/sps.lst', header = T)
+#only CSEPs
+cseps <-  read.table('/Users/lamprinos_rwth/Documents/results/42_kamoun_plot/true_cseps_525.lst', header = T)
+
+colnames(dnds) <- c('Gene_name','dn','ds','dnds')
+dnds_merged <- merge(table2, dnds, by ='Gene_name')
+cogs_merged <- table2[cogs$Gene_name,]
+
+
+#For the boxplots
+test <- cbind.data.frame(table2$Gene_name,table2$Inter_size.x,table2$Inter_size.y)
+test <- cbind(test, test$`table2$Inter_size.x`+test$`table2$Inter_size.y`)
+colnames(test) <- c('Gene_name','size1','size2','totalsize')
+summary(test[cogs$Gene_name,])
+summary(test[cseps$Gene_name,])
+summary(test[sps$Gene_name,])
+cogis <- test[cogs$Gene_name,]
+cogis <- cbind(cogis,'COG')
+spis <- test[sps$Gene_name,]
+spis <- cbind(spis,'SPs')
+csepis <- test[cseps$Gene_name,]
+csepis <- cbind(csepis,'CSEP')
+
+
+colnames(cogis) <- c('Gene_name','size1','size2','totalsize','type')
+colnames(csepis) <- c('Gene_name','size1','size2','totalsize','type')
+colnames(spis) <- c('Gene_name','size1','size2','totalsize','type')
+
+boxplot(log2(cogis$size1),log2(cogis$size2),log2(csepis$size1),log2(csepis$size2),log2(spis$size1),log2(spis$size2), 
+        names = c("COG, 5'prime","COG, 3'prime","CSEP, 5'prime","CSEP, 3'prime","SPs, 5'prime","SPs, 3'prime"), 
+        ylab = 'Log2 transformed size')
+
+boxplot(log2(cogis$totalsize),log2(csepis$totalsize),log2(spis$totalsize), 
+        names = c("COG, Intergenic size\nn=1427","CSEP, Intergenic size\nn=525","SP, Intergenic size\nn=238"), 
+        ylab = 'Log2 transformed size')
+
+
+#For the dn/ds plots
+
+ggplot(table2, aes(x= Inter_size.x,y=Inter_size.y)) +
+  #geom_hex()+
+  #scale_fill_distiller(palette = "Spectral", name="Gene\ncount")+
+  #geom_point(data=subset(table2, group == "SP"), color = 'black',alpha = 0.25, size = 2.5)+
+  #geom_point(data=subset(table2, Gene_name == "BLGH_03023"), color = 'orange',alpha = 1,size = 2.5)+
+  #geom_point(data=subset(table2, Gene_name == "BLGH_03022"), color = 'orange',alpha = 1,size = 2.5)+
+  #geom_point(data=subset(table2, Gene_name == "BLGH_02099"), color = 'red',alpha = 1,size = 2.5)+
+  #geom_point(data=subset(dnds_merged, dnds !=c(Inf,NA) & group == "Non SP"),aes(x= Inter_size.x,y=Inter_size.y,color=dnds)) +
+  geom_point(data=subset(dnds_merged, dnds !=c(Inf,NA)),aes(x= Inter_size.x,y=Inter_size.y,color=dnds)) +
+  scale_color_distiller(palette = "Spectral", name="dN/dS")+
+  scale_x_log10()+
+  scale_y_log10()+
+  ylab("5' intergenic length (bp)") +
+  xlab("3' intergenic length (bp)") +
+  facet_wrap(~group) +
+  theme_minimal()
+
+
+
+
+
+```
