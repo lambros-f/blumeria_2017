@@ -12,6 +12,8 @@ Suppl. Figure 2,8-11 | Final_documentation.Rmd | R markdown with scripts
 
 Intermediate analysis files can be found in the folder "useful_files".
 
+Datasets used for the analysis of the DH14 genome (annotation,assembly,SPs & CSEPs) can be found in "assembly_genome_dh14".
+
 For questions or more information please email lamprinos.frantzeskakis [at] rwth-aachen.de
 
 
